@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GeoMETs+</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --primary: #1a6fb5;
+    --primary-dark: #145a94;
+    --start-color: #1a8c3e;
+    --start-dark: #136b2f;
+    --stop-color: #c0392b;
+    --stop-dark: #962d22;
+    --mets-low: #555555;
+    --mets-mid: #1a8c3e;
+    --mets-high: #c0392b;
+    --bg: #f0f2f5;
+    --card: #ffffff;
+    --border: #d0d7de;
+    --text: #1a1a2e;
+    --text-sub: #666;
+    --radius: 12px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.09);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 10px 10px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  /* ---- Header ---- */
+  #header {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 11px 14px 10px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  #header-left { display: flex; flex-direction: column; gap: 1px; }
+  #app-title {
+    font-size: 1.75em;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--primary);
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+  #app-plus { font-size: 1em; font-weight: 800; color: #e07b10; vertical-align: baseline; }
+  #app-version { font-size: 0.68em; color: var(--text-sub); margin-top: 1px; }
+  #app-subtitle { font-size: 0.74em; color: var(--text-sub); margin-top: 2px; line-height: 1.35; }
+  #header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  #lang-btn {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    padding: 5px 15px;
+    font-size: 0.82em;
+    font-weight: 700;
+    cursor: pointer;
+    min-width: 48px;
+    text-align: center;
+  }
+  #lang-btn:active { background: var(--primary-dark); }
+  #gps-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.76em;
+    font-weight: 600;
+    color: var(--text-sub);
+  }
+  #gps-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: #bbb;
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  #gps-dot.acquired { background: var(--mets-mid); animation: glow 1.8s infinite; }
+  #gps-dot.searching { background: #e67e22; animation: glow 0.7s infinite; }
+  @keyframes glow { 0%,100%{opacity:1}50%{opacity:0.35} }
+  #gps-accuracy { font-size: 0.65em; color: var(--text-sub); text-align: right; }
+
+  /* ---- Info bar ---- */
+  #info-bar {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  #weight-display { font-size: 0.86em; color: var(--text-sub); }
+  #weight-val { font-weight: 700; color: var(--text); }
+  #change-weight-btn {
+    background: none;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 0.80em;
+    color: var(--primary);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #change-weight-btn:active { background: #eef4fb; }
+
+  /* ---- Measure card ---- */
+  #measure-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+  }
+
+  #idle-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 0 28px;
+    color: var(--text-sub);
+    font-size: 0.88em;
+    gap: 8px;
+    text-align: center;
+  }
+  .idle-icon { font-size: 3em; opacity: 0.35; }
+
+  /* Live display */
+  #live-display { display: none; }
+  #live-display.active { display: block; }
+
+  #elapsed-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 7px;
+  }
+  #elapsed-label { font-size: 0.74em; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.8px; }
+  #elapsed-value { font-size: 1.05em; font-weight: 700; font-family: 'SF Mono','Consolas',monospace; color: var(--text); }
+
+  #interval-bar {
+    height: 3px;
+    background: #e4e8ed;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  #interval-progress {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 1s linear;
+  }
+
+  .section-label {
+    font-size: 0.69em;
+    font-weight: 700;
+    color: var(--text-sub);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+
+  /* METs big display */
+  #mets-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  #mets-value {
+    font-size: 4.2em;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--mets-low);
+    transition: color 0.4s;
+    font-variant-numeric: tabular-nums;
+  }
+  #mets-unit { font-size: 1.05em; font-weight: 600; color: var(--text-sub); }
+  #motion-badge {
+    background: #f0f2f5;
+    color: var(--text-sub);
+    font-size: 0.72em;
+    font-weight: 700;
+    border-radius: 6px;
+    padding: 2px 7px;
+    margin-left: 4px;
+  }
+  #kcalmin-value { font-size: 0.95em; color: #333; margin-bottom: 12px; }
+
+  /* Cumulative summary */
+  .cum-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  .cum-cell {
+    background: #f4f7fb;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .cum-cell-label { font-size: 0.70em; color: var(--text-sub); font-weight: 600; margin-bottom: 2px; }
+  .cum-cell-value { font-size: 1.15em; font-weight: 700; color: var(--primary); }
+
+  /* Tab toggle — only "直近30秒" vs "累積距離" */
+  #view-toggle {
+    display: flex;
+    background: #f0f2f5;
+    border-radius: 9px;
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 10px;
+  }
+  .view-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-radius: 7px;
+    padding: 8px 4px;
+    font-size: 0.77em;
+    font-weight: 700;
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .view-tab.active {
+    background: var(--card);
+    color: var(--primary);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.11);
+  }
+
+  .data-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .data-cell {
+    background: #f4f7fb;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .data-cell.full { grid-column: 1 / -1; }
+  .data-label { font-size: 0.70em; color: var(--text-sub); font-weight: 600; margin-bottom: 2px; }
+  .data-value { font-size: 1.08em; font-weight: 700; color: var(--text); }
+
+  /* ---- START / STOP ---- */
+  #start-stop-row { display: flex; gap: 8px; }
+  #start-btn, #stop-btn {
+    flex: 1;
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 22px 10px;
+    font-size: 1.45em;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.14s;
+  }
+  #start-btn {
+    background: var(--start-color);
+    box-shadow: 0 4px 14px rgba(26,140,62,0.32);
+  }
+  #start-btn:active { background: var(--start-dark); transform: scale(0.97); }
+  #stop-btn {
+    background: var(--stop-color);
+    box-shadow: 0 4px 14px rgba(192,57,43,0.32);
+  }
+  #stop-btn:active { background: var(--stop-dark); transform: scale(0.97); }
+
+  /* ---- Save row ---- */
+  #save-row { display: none; gap: 8px; }
+  .save-btn {
+    flex: 1;
+    background: var(--card);
+    color: var(--primary);
+    border: 2px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 13px 8px;
+    font-size: 0.9em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.13s;
+  }
+  .save-btn:active { background: #eef4fb; }
+
+  /* ---- Summary ---- */
+  #summary-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    display: none;
+  }
+  #summary-card.visible { display: block; }
+  #summary-title {
+    font-size: 0.95em;
+    font-weight: 800;
+    color: var(--text);
+    padding-bottom: 7px;
+    margin-bottom: 10px;
+    border-bottom: 2.5px solid var(--primary);
+  }
+  .sum-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .sum-cell {
+    background: #f4f7fb;
+    border-radius: 8px;
+    padding: 9px 10px;
+  }
+  .sum-cell.full { grid-column: 1 / -1; }
+  .sum-label { font-size: 0.68em; color: var(--text-sub); font-weight: 600; margin-bottom: 3px; }
+  .sum-value { font-size: 1.10em; font-weight: 700; color: var(--text); }
+  .sum-value.big { font-size: 1.45em; }
+  .sum-value.accent { color: var(--primary); }
+
+  /* ---- Modal ---- */
+  #modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.48);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #modal-overlay.visible { display: flex; }
+  #modal-box {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px 20px 20px;
+    width: 100%;
+    max-width: 300px;
+    box-shadow: 0 8px 36px rgba(0,0,0,0.22);
+  }
+  #modal-title { font-size: 1.05em; font-weight: 800; margin-bottom: 8px; }
+  #modal-msg { font-size: 0.84em; color: var(--text-sub); margin-bottom: 13px; line-height: 1.5; }
+  #modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 1.1em;
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    margin-bottom: 14px;
+    outline: none;
+    -webkit-appearance: none;
+  }
+  #modal-input:focus { border-color: var(--primary); }
+  #modal-btns { display: flex; gap: 8px; }
+  .m-btn {
+    flex: 1;
+    padding: 11px;
+    border: none;
+    border-radius: 9px;
+    font-size: 0.95em;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  #modal-ok { background: var(--primary); color: #fff; }
+  #modal-cancel { background: #f0f2f5; color: var(--text); }
+
+  /* ---- Copyright ---- */
+  #copyright {
+    text-align: center;
+    font-size: 0.64em;
+    color: #b0b8c4;
+    padding: 2px 0 6px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <div id="header">
+    <div id="header-left">
+      <div id="app-title">GeoMETs<span id="app-plus">+</span></div>
+      <div id="app-version">V1.0 Beta</div>
+      <div id="app-subtitle" data-i18n="subtitle">地形対応GPSリアルタイム身体活動量計測</div>
+    </div>
+    <div id="header-right">
+      <button id="lang-btn">EN</button>
+      <div id="gps-status">
+        <div id="gps-dot"></div>
+        <span id="gps-status-text" data-i18n="gpsSearching">GPS衛星未捕捉</span>
+      </div>
+      <div id="gps-accuracy"></div>
+    </div>
+  </div>
+
+  <!-- Info bar -->
+  <div id="info-bar">
+    <div id="weight-display">
+      <span data-i18n="bodyweight">体重</span>: <span id="weight-val">--</span> kg
+    </div>
+    <button id="change-weight-btn" data-i18n="changeWeight">体重変更</button>
+  </div>
+
+  <!-- Measure card -->
+  <div id="measure-card">
+
+    <!-- Idle state -->
+    <div id="idle-display">
+      <div class="idle-icon">&#127939;</div>
+      <div data-i18n="idleMsg">STARTを押して計測を開始してください</div>
+    </div>
+
+    <!-- Live state (hidden until START) -->
+    <div id="live-display">
+      <!-- Elapsed + 30s progress -->
+      <div id="elapsed-bar">
+        <span id="elapsed-label" data-i18n="elapsedTime">経過時間</span>
+        <span id="elapsed-value">00:00:00</span>
+      </div>
+      <div id="interval-bar"><div id="interval-progress"></div></div>
+
+      <!-- Activity level -->
+      <div class="section-label" data-i18n="activityLevelLive">身体活動水準（直近30秒）</div>
+      <div id="mets-row">
+        <div id="mets-value">--</div>
+        <div id="mets-unit">METs</div>
+        <span id="motion-badge">--</span>
+      </div>
+      <div id="kcalmin-value">-- kcal/min</div>
+
+      <!-- Cumulative Ex + kcal (always visible) -->
+      <div class="section-label" data-i18n="activityAmount">身体活動量（累積）</div>
+      <div class="cum-row">
+        <div class="cum-cell">
+          <div class="cum-cell-label">Ex (METs·<span data-i18n="hour">時</span>)</div>
+          <div class="cum-cell-value" id="cum-ex">0.00</div>
+        </div>
+        <div class="cum-cell">
+          <div class="cum-cell-label" data-i18n="cumKcal">累積 kcal</div>
+          <div class="cum-cell-value" id="cum-kcal">0</div>
+        </div>
+      </div>
+
+      <!--
+        Tab toggle:
+        "直近30秒" → speed + altitude change (no METs, already shown above)
+        "累積"     → cumulative distance, ascent, descent (no Ex, already shown above)
+      -->
+      <div id="view-toggle">
+        <button class="view-tab active" id="tab-current" onclick="switchTab('current')" data-i18n="tabCurrent">直近30秒</button>
+        <button class="view-tab" id="tab-cumulative" onclick="switchTab('cumulative')" data-i18n="tabCumulative">累積</button>
+      </div>
+
+      <!-- Tab: current 30s — speed + altitude change only -->
+      <div id="view-current">
+        <div class="data-grid">
+          <div class="data-cell">
+            <div class="data-label" data-i18n="avgSpeed">平均速度</div>
+            <div class="data-value" id="cur-speed">--</div>
+          </div>
+          <div class="data-cell">
+            <div class="data-label" data-i18n="altChange">高度変化</div>
+            <div class="data-value" id="cur-alt">--</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: cumulative — distance, ascent, descent only -->
+      <div id="view-cumulative" style="display:none;">
+        <div class="data-grid">
+          <div class="data-cell full">
+            <div class="data-label" data-i18n="cumDist">累積距離</div>
+            <div class="data-value" id="cml-dist">0.000 km</div>
+          </div>
+          <div class="data-cell">
+            <div class="data-label" data-i18n="cumAscent">上り</div>
+            <div class="data-value" id="cml-up">0 m</div>
+          </div>
+          <div class="data-cell">
+            <div class="data-label" data-i18n="cumDescent">下り</div>
+            <div class="data-value" id="cml-down">0 m</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /live-display -->
+  </div><!-- /measure-card -->
+
+  <!-- START / STOP — always visible row -->
+  <div id="start-stop-row">
+    <button id="start-btn" data-i18n="start">START</button>
+    <button id="stop-btn" data-i18n="stop" style="display:none">STOP</button>
+  </div>
+
+  <!-- Save row (shown after STOP) -->
+  <div id="save-row">
+    <button class="save-btn" id="save-excel-btn" data-i18n="saveExcel">Excel保存</button>
+    <button class="save-btn" id="save-gpx-btn" data-i18n="saveGpx">GPX保存</button>
+  </div>
+
+  <!-- Summary (shown after STOP) -->
+  <div id="summary-card">
+    <div id="summary-title" data-i18n="summaryTitle">計測結果サマリー</div>
+
+    <div class="section-label" data-i18n="activityLevel">身体活動水準</div>
+    <div class="sum-grid">
+      <div class="sum-cell">
+        <div class="sum-label" data-i18n="avgMets">平均 METs</div>
+        <div class="sum-value big" id="sum-avg-mets">--</div>
+      </div>
+      <div class="sum-cell">
+        <div class="sum-label">Max METs</div>
+        <div class="sum-value big" id="sum-max-mets">--</div>
+      </div>
+      <div class="sum-cell full">
+        <div class="sum-label" data-i18n="avgKcalmin">平均 kcal/min</div>
+        <div class="sum-value" id="sum-avg-kcalmin">--</div>
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-top:10px;" data-i18n="activityAmount">身体活動量</div>
+    <div class="sum-grid">
+      <div class="sum-cell">
+        <div class="sum-label">Ex (METs·<span data-i18n="hour">時</span>)</div>
+        <div class="sum-value big accent" id="sum-ex">--</div>
+      </div>
+      <div class="sum-cell">
+        <div class="sum-label" data-i18n="totalKcal">総 kcal</div>
+        <div class="sum-value big" id="sum-kcal">--</div>
+      </div>
+      <div class="sum-cell full">
+        <div class="sum-label" data-i18n="totalTime">総時間</div>
+        <div class="sum-value" id="sum-time">--</div>
+      </div>
+      <div class="sum-cell">
+        <div class="sum-label" data-i18n="totalDist">総距離</div>
+        <div class="sum-value" id="sum-dist">--</div>
+      </div>
+      <div class="sum-cell">
+        <div class="sum-label" data-i18n="ascentDescent">上り / 下り</div>
+        <div class="sum-value" id="sum-ascent">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="copyright">©2026 A. Azuma. All Rights Reserved.</div>
+</div>
+
+<!-- Modal (weight input) -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <div id="modal-title"></div>
+    <div id="modal-msg"></div>
+    <input type="number" id="modal-input" inputmode="decimal" min="20" max="300" step="0.1">
+    <div id="modal-btns">
+      <button class="m-btn" id="modal-cancel" data-i18n="cancel">キャンセル</button>
+      <button class="m-btn" id="modal-ok" data-i18n="ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================
+   i18n
+========================================================== */
+const T = {
+  ja: {
+    subtitle:       "地形対応GPSリアルタイム身体活動量計測",
+    gpsSearching:   "GPS衛星未捕捉",
+    gpsAcquired:    "GPS衛星捕捉中",
+    bodyweight:     "体重",
+    changeWeight:   "体重変更",
+    idleMsg:        "STARTを押して計測を開始してください",
+    elapsedTime:    "経過時間",
+    activityLevel:  "身体活動水準",
+    activityLevelLive: "身体活動水準（直近30秒）",
+    activityAmount: "身体活動量（累積）",
+    cumKcal:        "総 kcal",
+    hour:           "時",
+    tabCurrent:     "直近30秒",
+    tabCumulative:  "累積",
+    avgSpeed:       "平均速度",
+    altChange:      "高度変化",
+    cumDist:        "累積距離",
+    cumAscent:      "上り",
+    cumDescent:     "下り",
+    start:          "START",
+    stop:           "STOP",
+    saveExcel:      "Excel保存",
+    saveGpx:        "GPX保存",
+    summaryTitle:   "計測結果サマリー",
+    avgMets:        "平均 METs",
+    avgKcalmin:     "平均 kcal/min",
+    totalKcal:      "総 kcal",
+    totalTime:      "総時間",
+    totalDist:      "総距離",
+    ascentDescent:  "上り / 下り",
+    cancel:         "キャンセル",
+    ok:             "OK",
+    wmTitle:        "体重入力",
+    wmMsg:          "体重を入力してください (kg)",
+    walking:        "歩行",
+    running:        "走行",
+    gpsNA:          "GPS非対応",
+    gpsDenied:      "GPS許可なし",
+    noData:         "計測データがありません",
+    saveGpxQ:       "GPXデータも保存しますか？",
+  },
+  en: {
+    subtitle:       "Terrain-Adaptive GPS Real-time Physical Activity Monitor",
+    gpsSearching:   "GPS not acquired",
+    gpsAcquired:    "GPS acquired",
+    bodyweight:     "Body weight",
+    changeWeight:   "Change BW",
+    idleMsg:        "Press START to begin measurement",
+    elapsedTime:    "Elapsed",
+    activityLevel:  "Activity Level",
+    activityLevelLive: "Activity Level (Last 30s)",
+    activityAmount: "Activity Amount (Cumul.)",
+    cumKcal:        "Total kcal",
+    hour:           "h",
+    tabCurrent:     "Last 30s",
+    tabCumulative:  "Cumulative",
+    avgSpeed:       "Avg speed",
+    altChange:      "Alt. change",
+    cumDist:        "Cumul. dist.",
+    cumAscent:      "Ascent",
+    cumDescent:     "Descent",
+    start:          "START",
+    stop:           "STOP",
+    saveExcel:      "Save Excel",
+    saveGpx:        "Save GPX",
+    summaryTitle:   "Measurement Summary",
+    avgMets:        "Avg METs",
+    avgKcalmin:     "Avg kcal/min",
+    totalKcal:      "Total kcal",
+    totalTime:      "Total time",
+    totalDist:      "Total dist.",
+    ascentDescent:  "Up / Down",
+    cancel:         "Cancel",
+    ok:             "OK",
+    wmTitle:        "Enter Body Weight",
+    wmMsg:          "Please enter your body weight (kg)",
+    walking:        "Walking",
+    running:        "Running",
+    gpsNA:          "GPS unavailable",
+    gpsDenied:      "GPS permission denied",
+    noData:         "No measurement data",
+    saveGpxQ:       "Also save GPX data?",
+  }
+};
+
+let lang = localStorage.getItem("geometsplus_lang") || "ja";
+function t(k) { return T[lang][k] || k; }
+
+function applyLang() {
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const k = el.getAttribute("data-i18n");
+    if (T[lang][k] !== undefined) el.textContent = T[lang][k];
+  });
+  document.getElementById("lang-btn").textContent = lang === "ja" ? "EN" : "JA";
+  document.getElementById("gps-status-text").textContent =
+    gpsAcquired ? t("gpsAcquired") : t("gpsSearching");
+}
+
+document.getElementById("lang-btn").addEventListener("click", () => {
+  lang = lang === "ja" ? "en" : "ja";
+  localStorage.setItem("geometsplus_lang", lang);
+  applyLang();
+});
+
+/* ==========================================================
+   Body weight
+========================================================== */
+let bodymass = parseFloat(localStorage.getItem("geometsplus_bm") || "0");
+
+function updateWeightDisplay() {
+  document.getElementById("weight-val").textContent =
+    bodymass > 0 ? bodymass.toFixed(1) : "--";
+}
+
+function showWeightModal(cb) {
+  const overlay = document.getElementById("modal-overlay");
+  document.getElementById("modal-title").textContent = t("wmTitle");
+  document.getElementById("modal-msg").textContent = t("wmMsg");
+  const inp = document.getElementById("modal-input");
+  inp.value = bodymass > 0 ? bodymass : "";
+  inp.placeholder = "例: 65";
+  overlay.classList.add("visible");
+  setTimeout(() => inp.focus(), 80);
+
+  const okBtn = document.getElementById("modal-ok");
+  const cancelBtn = document.getElementById("modal-cancel");
+
+  const done = (saved) => {
+    overlay.classList.remove("visible");
+    okBtn.removeEventListener("click", onOk);
+    cancelBtn.removeEventListener("click", onCancel);
+    inp.removeEventListener("keydown", onKey);
+    if (cb) cb(saved);
+  };
+  const onOk = () => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v) && v >= 20 && v <= 300) {
+      bodymass = v;
+      localStorage.setItem("geometsplus_bm", v);
+      updateWeightDisplay();
+      done(true);
+    } else {
+      inp.style.borderColor = "red";
+      setTimeout(() => { inp.style.borderColor = ""; }, 800);
+    }
+  };
+  const onCancel = () => done(false);
+  const onKey = (e) => { if (e.key === "Enter") onOk(); if (e.key === "Escape") onCancel(); };
+
+  okBtn.addEventListener("click", onOk);
+  cancelBtn.addEventListener("click", onCancel);
+  inp.addEventListener("keydown", onKey);
+}
+
+document.getElementById("change-weight-btn").addEventListener("click", () => {
+  showWeightModal((saved) => {
+    if (saved && sessionData.length > 0) recalcCumulatives();
+  });
+});
+
+/* ==========================================================
+   GPS
+========================================================== */
+let gpsAcquired = false;
+let watchId = null;
+let lastPos = null;
+
+function startGPSWatch() {
+  if (!navigator.geolocation) {
+    document.getElementById("gps-status-text").textContent = t("gpsNA");
+    return;
+  }
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      gpsAcquired = true;
+      lastPos = pos;
+      document.getElementById("gps-dot").className = "acquired";
+      document.getElementById("gps-status-text").textContent = t("gpsAcquired");
+      document.getElementById("gps-accuracy").textContent =
+        `±${Math.round(pos.coords.accuracy)} m`;
+    },
+    (err) => {
+      gpsAcquired = false;
+      document.getElementById("gps-dot").className = "searching";
+      document.getElementById("gps-status-text").textContent =
+        err.code === 1 ? t("gpsDenied") : t("gpsSearching");
+      document.getElementById("gps-accuracy").textContent = "";
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+  );
+}
+
+function stopGPSWatch() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+}
+
+/* ==========================================================
+   Physics (ported from GeoMETs, East & Matsui 2019)
+
+   Walking/running split:
+     speed >= 4 km/h → running (Cr), otherwise → walking (Cw)
+
+   NOTE on GPS noise:
+     GPS horizontal accuracy is typically ±5–15 m.
+     Over 30 s at walking pace (~1.2 m/s = 43 m) that noise can add
+     up to ~10–30 m of apparent extra distance.
+     We apply a soft noise correction: distances < GPS accuracy
+     threshold are treated as near-zero.
+========================================================== */
+function toRad(d) { return d * Math.PI / 180; }
+
+function dist2D(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2
+          + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function Cw(i) { return 280.5*i**5 - 58.7*i**4 - 76.8*i**3 + 51.9*i**2 + 19.6*i + 2.5; }
+function Cr(i) { return 155.4*i**5 - 30.4*i**4 - 43.3*i**3 + 46.3*i**2 + 19.5*i + 3.6; }
+
+/*
+  GPS accuracy noise correction:
+  If the reported 2D distance is smaller than the combined positional
+  uncertainty of both endpoints, clamp the distance down.
+  acc1, acc2: reported accuracy (m) of each fix.
+  Without this, stationary periods falsely show walking speed.
+*/
+function noiseCorrectedDist(rawDist, acc1, acc2) {
+  const noiseFloor = (acc1 + acc2) * 0.5; // conservative threshold
+  if (rawDist < noiseFloor) return 0;
+  return rawDist;
+}
+
+function calcSegment(d2d, dh, dtSec, bm) {
+  const d = Math.sqrt(d2d*d2d + dh*dh);
+
+  if (d < 1.0) {
+    // Effectively stationary — return resting values
+    const Erw = 3.5 * bm * 0.005;          // kcal/min
+    return {
+      d: 0, dh, speedKmh: 0, running: false, i: 0,
+      METs: 1.0,
+      Ekw: Erw,
+      exDelta: 1.0 * (dtSec / 3600),
+      kcalDelta: Erw * (dtSec / 60)
+    };
+  }
+
+  const speedKmh = (d / dtSec) * 3.6;
+  const running  = speedKmh >= 4.0;
+  const i = Math.max(-0.5, Math.min(0.5, dh / d));
+  const Ci = running ? Cr(i) : Cw(i);
+
+  // Ec [J/kg/m] × d [m] = total J/kg for this segment
+  const Ec = Ci * d;
+
+  // Convert J/kg → kcal/min (per unit body mass, normalised to per-minute)
+  // Ek [kcal/min/kg] = Ec [J/kg] × 0.000239 [kcal/J] × (60/dtSec) [min^-1]
+  const Ek  = Ec * 0.000239 * (60 / dtSec);
+  const Ekw = Ek * bm;          // kcal/min (total, for this person)
+
+  // Resting metabolic rate [kcal/min]
+  const Erw = 3.5 * bm * 0.005;
+
+  let METs = Ekw / Erw;
+  if (METs < 1) METs = 1;
+  METs = Math.min(METs, 20);
+
+  // Ex for this segment [METs·h]
+  const exDelta = METs * (dtSec / 3600);
+
+  // kcal expended this segment (Ekw is already per-minute, convert to segment duration)
+  const kcalDelta = Ekw * (dtSec / 60);
+
+  return { d, dh, speedKmh, running, i, METs, Ekw, exDelta, kcalDelta };
+}
+
+/* ==========================================================
+   Session state
+========================================================== */
+const DT = 30; // seconds per measurement interval
+
+let measuring      = false;
+let sessionData    = [];   // computed entries
+let gpxPoints      = [];   // raw GPS fixes
+let startTime      = null;
+let segStart       = null; // { lat, lon, alt, time, acc }
+let intervalHandle = null;
+let elapsedHandle  = null;
+let progressHandle = null;
+let currentTab     = "current";
+
+/* ==========================================================
+   UI helpers
+========================================================== */
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById("tab-current").classList.toggle("active", tab === "current");
+  document.getElementById("tab-cumulative").classList.toggle("active", tab === "cumulative");
+  document.getElementById("view-current").style.display    = tab === "current"    ? "" : "none";
+  document.getElementById("view-cumulative").style.display = tab === "cumulative" ? "" : "none";
+}
+
+function metsColor(m) {
+  if (m >= 6.0) return "var(--mets-high)";
+  if (m >= 3.0) return "var(--mets-mid)";
+  return "var(--mets-low)";
+}
+
+function fmtElapsed(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function fmtHMS(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return (h > 0 ? `${h}h` : "") + `${m}m${s}s`;
+}
+
+function getNowStr() {
+  const n = new Date();
+  return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}-${String(n.getHours()).padStart(2,"0")}${String(n.getMinutes()).padStart(2,"0")}`;
+}
+
+/* ==========================================================
+   START
+========================================================== */
+document.getElementById("start-btn").addEventListener("click", () => {
+  if (!bodymass || bodymass <= 0) {
+    showWeightModal((ok) => { if (ok) doStart(); });
+  } else {
+    doStart();
+  }
+});
+
+function doStart() {
+  measuring   = true;
+  sessionData = [];
+  gpxPoints   = [];
+  startTime   = new Date();
+  segStart    = null;
+
+  // Show STOP, hide START
+  document.getElementById("start-btn").style.display = "none";
+  document.getElementById("stop-btn").style.display  = "block";
+
+  document.getElementById("save-row").style.display = "none";
+  document.getElementById("summary-card").classList.remove("visible");
+  document.getElementById("idle-display").style.display = "none";
+  document.getElementById("live-display").classList.add("active");
+
+  resetLiveDisplay();
+
+  /*
+    Immediately grab the first GPS fix as segStart so that the FIRST
+    30-second interval already has a valid anchor point and can produce
+    a result at t=30s instead of t=60s.
+  */
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      segStart = posToSnap(pos);
+      gpxPoints.push({ lat: segStart.lat, lon: segStart.lon, alt: segStart.alt, time: segStart.time });
+    },
+    () => {
+      // If we can't get an immediate fix, segStart stays null and will be
+      // set on the first interval callback as before.
+    },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 }
+  );
+
+  startElapsedTick();
+  scheduleInterval();
+}
+
+function posToSnap(pos) {
+  return {
+    lat:  pos.coords.latitude,
+    lon:  pos.coords.longitude,
+    alt:  pos.coords.altitude !== null ? pos.coords.altitude : 0,
+    acc:  pos.coords.accuracy || 15,
+    time: new Date()
+  };
+}
+
+function resetLiveDisplay() {
+  document.getElementById("mets-value").textContent = "--";
+  document.getElementById("mets-value").style.color = "var(--mets-low)";
+  document.getElementById("kcalmin-value").textContent = "-- kcal/min";
+  document.getElementById("motion-badge").textContent = "--";
+  document.getElementById("cum-ex").textContent = "0.00";
+  document.getElementById("cum-kcal").textContent = "0";
+  document.getElementById("cur-speed").textContent = "--";
+  document.getElementById("cur-alt").textContent = "--";
+  document.getElementById("cml-dist").textContent = "0.000 km";
+  document.getElementById("cml-up").textContent = "0 m";
+  document.getElementById("cml-down").textContent = "0 m";
+  document.getElementById("interval-progress").style.width = "0%";
+  document.getElementById("elapsed-value").textContent = "00:00:00";
+}
+
+/* ==========================================================
+   STOP
+========================================================== */
+document.getElementById("stop-btn").addEventListener("click", doStop);
+
+function doStop() {
+  if (!measuring) return;
+  measuring = false;
+
+  clearInterval(elapsedHandle);
+  clearTimeout(intervalHandle);
+  clearInterval(progressHandle);
+  elapsedHandle = intervalHandle = progressHandle = null;
+
+  // Show START again, hide STOP
+  document.getElementById("stop-btn").style.display  = "none";
+  document.getElementById("start-btn").style.display = "block";
+
+  if (sessionData.length > 0) {
+    document.getElementById("save-row").style.display = "flex";
+    showSummary();
+  } else {
+    document.getElementById("live-display").classList.remove("active");
+    document.getElementById("idle-display").style.display = "";
+  }
+}
+
+/* ==========================================================
+   Elapsed timer
+========================================================== */
+function startElapsedTick() {
+  elapsedHandle = setInterval(() => {
+    const sec = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById("elapsed-value").textContent = fmtElapsed(sec);
+  }, 1000);
+}
+
+/* ==========================================================
+   30-second interval scheduling
+
+   Design:
+   - setTimeout fires at DT seconds
+   - At each fire: call collectAndCompute(), then re-schedule
+   - Progress bar ticks every 1s
+========================================================== */
+function scheduleInterval() {
+  if (!measuring) return;
+
+  let ticked = 0;
+  document.getElementById("interval-progress").style.width = "0%";
+
+  progressHandle = setInterval(() => {
+    ticked++;
+    const pct = Math.min((ticked / DT) * 100, 100);
+    document.getElementById("interval-progress").style.width = pct + "%";
+  }, 1000);
+
+  intervalHandle = setTimeout(() => {
+    clearInterval(progressHandle);
+    collectAndCompute();
+    scheduleInterval();
+  }, DT * 1000);
+}
+
+/* ==========================================================
+   Collect GPS and compute 30-second segment
+
+   Key fix: segStart is seeded immediately on START so the first
+   interval (t=30s) always produces a result.
+========================================================== */
+function collectAndCompute() {
+  if (!measuring) return;
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const snap = posToSnap(pos);
+      lastPos = pos;
+
+      gpxPoints.push({ lat: snap.lat, lon: snap.lon, alt: snap.alt, time: snap.time });
+
+      if (!segStart) {
+        // Fallback: segStart was not set on START (no immediate fix)
+        segStart = snap;
+        return;
+      }
+
+      const dtSec = Math.max((snap.time - segStart.time) / 1000, 1);
+      const rawD2d = dist2D(segStart.lat, segStart.lon, snap.lat, snap.lon);
+
+      // GPS noise correction: clamp distance if within positional uncertainty
+      const d2d = noiseCorrectedDist(rawD2d, segStart.acc, snap.acc);
+      const dh  = snap.alt - segStart.alt;
+
+      const calc = calcSegment(d2d, dh, dtSec, bodymass);
+
+      // Accumulate
+      const prev    = sessionData.length > 0 ? sessionData[sessionData.length - 1] : null;
+      const cumEx   = (prev ? prev.cumEx   : 0) + calc.exDelta;
+      const cumKcal = (prev ? prev.cumKcal : 0) + calc.kcalDelta;
+      const cumDist = (prev ? prev.cumDist : 0) + calc.d;
+      const cumUp   = (prev ? prev.cumUp   : 0) + (dh > 0 ? dh : 0);
+      const cumDown = (prev ? prev.cumDown : 0) + (dh < 0 ? -dh : 0);
+
+      const entry = {
+        time: snap.time, lat: snap.lat, lon: snap.lon, alt: snap.alt,
+        d2d, dh, dtSec,
+        ...calc,
+        cumEx, cumKcal, cumDist, cumUp, cumDown,
+        segStartSnap: { ...segStart }
+      };
+      sessionData.push(entry);
+      updateLiveDisplay(entry);
+
+      segStart = snap;
+    },
+    (_err) => {
+      // GPS error mid-interval: use watchPosition's last known fix
+      if (lastPos && !segStart) {
+        segStart = posToSnap(lastPos);
+      }
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 9000 }
+  );
+}
+
+/* ==========================================================
+   Update live display after each interval
+========================================================== */
+function updateLiveDisplay(e) {
+  const mets = e.METs;
+  const metsEl = document.getElementById("mets-value");
+  metsEl.textContent = mets.toFixed(1);
+  metsEl.style.color = metsColor(mets);
+
+  document.getElementById("motion-badge").textContent =
+    e.running ? t("running") : t("walking");
+
+  // kcal/min: rate over the actual measured dtSec
+  const kcalMinRate = e.Ekw * (60 / e.dtSec);
+  document.getElementById("kcalmin-value").textContent = `${kcalMinRate.toFixed(2)} kcal/min`;
+
+  // Cumulative (always-visible panel)
+  document.getElementById("cum-ex").textContent = e.cumEx.toFixed(2);
+  document.getElementById("cum-kcal").textContent = Math.round(e.cumKcal);
+
+  // Tab: current 30s
+  document.getElementById("cur-speed").textContent = `${e.speedKmh.toFixed(2)} km/h`;
+  const sign = e.dh > 0 ? "+" : "";
+  document.getElementById("cur-alt").textContent = `${sign}${e.dh.toFixed(1)} m`;
+
+  // Tab: cumulative
+  document.getElementById("cml-dist").textContent = `${(e.cumDist/1000).toFixed(3)} km`;
+  document.getElementById("cml-up").textContent   = `${Math.round(e.cumUp)} m`;
+  document.getElementById("cml-down").textContent = `${Math.round(e.cumDown)} m`;
+}
+
+/* ==========================================================
+   Recalculate cumulatives after body weight change
+========================================================== */
+function recalcCumulatives() {
+  let cumEx = 0, cumKcal = 0, cumDist = 0, cumUp = 0, cumDown = 0;
+  for (const e of sessionData) {
+    const c = calcSegment(e.d2d, e.dh, e.dtSec, bodymass);
+    Object.assign(e, c);
+    cumEx   += c.exDelta;
+    cumKcal += c.kcalDelta;
+    cumDist += c.d;
+    cumUp   += e.dh > 0 ? e.dh : 0;
+    cumDown += e.dh < 0 ? -e.dh : 0;
+    e.cumEx = cumEx; e.cumKcal = cumKcal;
+    e.cumDist = cumDist; e.cumUp = cumUp; e.cumDown = cumDown;
+  }
+  if (sessionData.length > 0) updateLiveDisplay(sessionData[sessionData.length - 1]);
+}
+
+/* ==========================================================
+   Summary (shown after STOP)
+========================================================== */
+function showSummary() {
+  const n = sessionData.length;
+  if (n === 0) return;
+
+  const last = sessionData[n - 1];
+  const avgMETs    = sessionData.reduce((s, e) => s + e.METs, 0) / n;
+  const maxMETs    = sessionData.reduce((m, e) => Math.max(m, e.METs), 0);
+  const avgKcalMin = sessionData.reduce((s, e) => s + e.Ekw * (60 / e.dtSec), 0) / n;
+  const totalSec   = Math.floor((last.time - startTime) / 1000);
+
+  document.getElementById("sum-avg-mets").textContent = avgMETs.toFixed(1);
+  document.getElementById("sum-avg-mets").style.color = metsColor(avgMETs);
+  document.getElementById("sum-max-mets").textContent = maxMETs.toFixed(1);
+  document.getElementById("sum-max-mets").style.color = metsColor(maxMETs);
+  document.getElementById("sum-avg-kcalmin").textContent = `${avgKcalMin.toFixed(2)} kcal/min`;
+  document.getElementById("sum-ex").textContent   = last.cumEx.toFixed(2);
+  document.getElementById("sum-kcal").textContent = Math.round(last.cumKcal);
+  document.getElementById("sum-time").textContent = fmtHMS(totalSec);
+  document.getElementById("sum-dist").textContent = `${(last.cumDist/1000).toFixed(3)} km`;
+  document.getElementById("sum-ascent").textContent =
+    `${Math.round(last.cumUp)} m / ${Math.round(last.cumDown)} m`;
+
+  document.getElementById("summary-card").classList.add("visible");
+}
+
+/* ==========================================================
+   Excel export
+========================================================== */
+document.getElementById("save-excel-btn").addEventListener("click", () => {
+  if (sessionData.length === 0) { alert(t("noData")); return; }
+  doSaveExcel();
+  if (confirm(t("saveGpxQ"))) doSaveGPX();
+});
+
+async function sharOrDownload(blob, filename) {
+  if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })) {
+    try {
+      await navigator.share({ files: [new File([blob], filename, { type: blob.type })] });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function doSaveExcel() {
+  const last      = sessionData[sessionData.length - 1];
+  const totalSec  = Math.floor((last.time - startTime) / 1000);
+  const walkData  = sessionData.filter(e => !e.running);
+  const runData   = sessionData.filter(e => e.running);
+  const walkDist  = walkData.reduce((s, e) => s + e.d, 0);
+  const runDist   = runData.reduce((s,  e) => s + e.d, 0);
+  const walkTimeSec = walkData.reduce((s, e) => s + e.dtSec, 0);
+  const runTimeSec  = runData.reduce((s,  e) => s + e.dtSec, 0);
+  const avgWalkSpd  = walkTimeSec > 0 ? (walkDist / walkTimeSec) * 3.6 : 0;
+  const avgRunSpd   = runTimeSec  > 0 ? (runDist  / runTimeSec)  * 3.6 : 0;
+
+  const alts   = gpxPoints.map(p => p.alt).filter(a => a !== 0);
+  const maxAlt = alts.length > 0 ? Math.max(...alts) : 0;
+  const minAlt = alts.length > 0 ? Math.min(...alts) : 0;
+
+  const header = ["No","Time","Distance(m)","dh/d(i)","METs","kcal/min",
+                  "Cumul.Ex(METs·h)","Cumul.kcal","Walk/Run"];
+  const rows = [header];
+  sessionData.forEach((e, idx) => {
+    rows.push([
+      idx + 1,
+      e.time.toISOString(),
+      e.d.toFixed(2),
+      e.i.toFixed(4),
+      e.METs.toFixed(2),
+      (e.Ekw * 60 / e.dtSec).toFixed(3),
+      e.cumEx.toFixed(4),
+      Math.round(e.cumKcal),
+      e.running ? t("running") : t("walking")
+    ]);
+  });
+
+  rows.push([], ["--- Summary ---"]);
+  rows.push(["Total time (s)",       totalSec]);
+  rows.push(["Body mass (kg)",        bodymass]);
+  rows.push(["Walk time (s)",         Math.round(walkTimeSec)]);
+  rows.push(["Walk distance (m)",     walkDist.toFixed(2)]);
+  rows.push(["Avg walk speed (km/h)", avgWalkSpd.toFixed(2)]);
+  rows.push(["Run time (s)",          Math.round(runTimeSec)]);
+  rows.push(["Run distance (m)",      runDist.toFixed(2)]);
+  rows.push(["Avg run speed (km/h)",  avgRunSpd.toFixed(2)]);
+  rows.push(["Max altitude (m)",      maxAlt.toFixed(1)]);
+  rows.push(["Min altitude (m)",      minAlt.toFixed(1)]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "GeoMETs+ Data");
+  const filename = `GeoMETs+_${getNowStr()}.xlsx`;
+  const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  sharOrDownload(blob, filename);
+}
+
+/* ==========================================================
+   GPX export
+========================================================== */
+document.getElementById("save-gpx-btn").addEventListener("click", () => {
+  if (gpxPoints.length === 0) { alert(t("noData")); return; }
+  doSaveGPX();
+});
+
+function doSaveGPX() {
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`
+    + `<gpx version="1.1" creator="GeoMETs+" xmlns="http://www.topografix.com/GPX/1/1">\n`
+    + `  <trk><name>GeoMETs+ Track</name><trkseg>\n`;
+  for (const p of gpxPoints) {
+    xml += `    <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">\n`
+         + `      <ele>${p.alt.toFixed(2)}</ele>\n`
+         + `      <time>${p.time.toISOString()}</time>\n`
+         + `    </trkpt>\n`;
+  }
+  xml += `  </trkseg></trk>\n</gpx>`;
+
+  const blob = new Blob([xml], { type: "application/gpx+xml" });
+  sharOrDownload(blob, `GeoMETs+_${getNowStr()}.gpx`);
+}
+
+/* ==========================================================
+   Anti-copy / copyright
+========================================================== */
+document.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && ["s","p","u"].includes(k)) e.preventDefault();
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i","c","j"].includes(k)) e.preventDefault();
+  if (e.key === "F12") e.preventDefault();
+});
+
+function checkCopyright() {
+  const last = parseInt(localStorage.getItem("geometsplus_warn") || "0");
+  if (Date.now() - last > 30 * 86400000) {
+    alert("CAUTION: This tool is protected by copyright (©2026 A. Azuma. All Rights Reserved). Unauthorized downloading, copying, or redistribution is prohibited.\n注意：本ツールは著作権により保護されています (©2026 A. Azuma. All Rights Reserved)．無断でのダウンロード，複製，再配布を禁じます．");
+    localStorage.setItem("geometsplus_warn", Date.now());
+  }
+}
+
+/* ==========================================================
+   Init
+========================================================== */
+window.addEventListener("load", () => {
+  checkCopyright();
+  updateWeightDisplay();
+  applyLang();
+  startGPSWatch();
+
+  if (bodymass <= 0) {
+    showWeightModal(() => {});
+  }
+});
+</script>
+</body>
+</html>
