@@ -124,21 +124,29 @@
     border-left: 4px solid #e67e22;
     color: #7a4d00;
     font-size: 0.82em;
-    padding: 8px 12px;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 6px;
+    flex-direction: column;
+    align-items: flex-start;
   }
   #gps-denied-banner.visible { display: flex; }
+  #gps-denied-msg { font-weight: 600; }
+  #gps-denied-steps {
+    margin: 2px 0 4px 0;
+    padding-left: 16px;
+    line-height: 1.65;
+  }
+  #gps-denied-steps li { list-style: decimal; }
   #gps-retry-btn {
     background: #e67e22;
     color: #fff;
     border: none;
     border-radius: 5px;
-    padding: 4px 10px;
+    padding: 5px 14px;
     font-size: 0.9em;
     cursor: pointer;
     white-space: nowrap;
+    align-self: flex-end;
   }
   #gps-retry-btn:active { background: #c96a10; }
 
@@ -462,7 +470,8 @@
 
   <!-- GPS permission denied banner -->
   <div id="gps-denied-banner">
-    <span id="gps-denied-msg">位置情報の使用が許可されていません。ブラウザ／OS の設定で許可してから再試行してください。</span>
+    <span id="gps-denied-msg"></span>
+    <div id="gps-denied-steps"></div>
     <button id="gps-retry-btn">再試行</button>
   </div>
 
@@ -736,10 +745,7 @@ function applyLang() {
   // update denied banner text if visible
   const banner = document.getElementById("gps-denied-banner");
   if (banner && banner.classList.contains("visible")) {
-    document.getElementById("gps-denied-msg").textContent = lang === "en"
-      ? "Location access is denied. Allow it in your browser/OS settings, then tap Retry."
-      : "位置情報の使用が許可されていません。ブラウザ／OS の設定で許可してから再試行してください。";
-    document.getElementById("gps-retry-btn").textContent = lang === "en" ? "Retry" : "再試行";
+    showDeniedBanner();
   }
 }
 
@@ -843,24 +849,98 @@ function startGPSWatch() {
           setTimeout(doWatch, 3000);
         }
       },
-      // timeout omitted → browser waits as long as needed for a real GPS fix
-      { enableHighAccuracy: true, maximumAge: 0 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
   }
   doWatch();
 }
 
+function detectOS() {
+  const ua = navigator.userAgent;
+  if (/iphone|ipad|ipod/i.test(ua)) return "ios";
+  if (/android/i.test(ua)) return "android";
+  return "other";
+}
+
 function showDeniedBanner() {
   const banner = document.getElementById("gps-denied-banner");
   const msg = document.getElementById("gps-denied-msg");
+  const steps = document.getElementById("gps-denied-steps");
   const btn = document.getElementById("gps-retry-btn");
-  msg.textContent = lang === "en"
-    ? "Location access is denied. Allow it in your browser/OS settings, then tap Retry."
-    : "位置情報の使用が許可されていません。ブラウザ／OS の設定で許可してから再試行してください。";
+  const os = detectOS();
+
+  const content = {
+    ios: {
+      ja: {
+        msg: "位置情報の使用が許可されていません。",
+        steps: [
+          "iPhone の「設定」アプリを開く",
+          "「プライバシーとセキュリティ」→「位置情報サービス」",
+          "「Safari」→「このAppの使用中」または「常に」を選択",
+          "このページに戻り「再試行」をタップ"
+        ]
+      },
+      en: {
+        msg: "Location access is denied.",
+        steps: [
+          "Open the iPhone Settings app",
+          "Go to Privacy & Security → Location Services",
+          "Tap Safari → select While Using the App or Always",
+          "Return here and tap Retry"
+        ]
+      }
+    },
+    android: {
+      ja: {
+        msg: "位置情報の使用が許可されていません。",
+        steps: [
+          "ブラウザのアドレスバー左の鍵アイコンをタップ",
+          "「権限」→「位置情報」→「許可」を選択",
+          "または：設定 → アプリ → ブラウザ → 権限 → 位置情報を許可",
+          "このページに戻り「再試行」をタップ"
+        ]
+      },
+      en: {
+        msg: "Location access is denied.",
+        steps: [
+          "Tap the lock icon in the browser address bar",
+          "Select Permissions → Location → Allow",
+          "Or: Settings → Apps → Browser → Permissions → Allow Location",
+          "Return here and tap Retry"
+        ]
+      }
+    },
+    other: {
+      ja: {
+        msg: "位置情報の使用が許可されていません。",
+        steps: [
+          "ブラウザのアドレスバー付近の位置情報アイコンをクリック",
+          "「許可」を選択して設定を保存",
+          "ページを再読み込みするか「再試行」をクリック"
+        ]
+      },
+      en: {
+        msg: "Location access is denied.",
+        steps: [
+          "Click the location icon near the browser address bar",
+          "Select Allow and save the setting",
+          "Reload the page or click Retry"
+        ]
+      }
+    }
+  };
+
+  const c = content[os][lang];
+  msg.textContent = c.msg;
+  steps.innerHTML = "<ol>" + c.steps.map(s => `<li>${s}</li>`).join("") + "</ol>";
   btn.textContent = lang === "en" ? "Retry" : "再試行";
   banner.classList.add("visible");
   btn.onclick = () => {
     banner.classList.remove("visible");
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
     startGPSWatch();
   };
 }
