@@ -106,7 +106,12 @@
     font-size: 0.76em;
     font-weight: 600;
     color: var(--text-sub);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
   }
+  #gps-status.gps-active { cursor: default; }
+  #gps-status:not(.gps-active):active { opacity: 0.65; }
   #gps-dot {
     width: 9px; height: 9px;
     border-radius: 50%;
@@ -460,9 +465,9 @@
     </div>
     <div id="header-right">
       <button id="lang-btn">EN</button>
-      <div id="gps-status">
+      <div id="gps-status" id="gps-start-btn" role="button" title="タップしてGPS開始">
         <div id="gps-dot"></div>
-        <span id="gps-status-text" data-i18n="gpsSearching">GPS衛星未捕捉</span>
+        <span id="gps-status-text" data-i18n="gpsTapToStart">タップしてGPS開始</span>
       </div>
       <div id="gps-accuracy"></div>
     </div>
@@ -647,6 +652,7 @@
 const T = {
   ja: {
     subtitle:       "地形対応GPSリアルタイム身体活動量計測",
+    gpsTapToStart:  "タップしてGPS開始",
     gpsSearching:   "GPS衛星未捕捉",
     gpsAcquired:    "GPS衛星捕捉中",
     bodyweight:     "体重",
@@ -689,6 +695,7 @@ const T = {
   },
   en: {
     subtitle:       "Terrain-Adaptive GPS Real-time Physical Activity Monitor",
+    gpsTapToStart:  "Tap to enable GPS",
     gpsSearching:   "GPS not acquired",
     gpsAcquired:    "GPS acquired",
     bodyweight:     "Body weight",
@@ -740,8 +747,9 @@ function applyLang() {
     if (T[lang][k] !== undefined) el.textContent = T[lang][k];
   });
   document.getElementById("lang-btn").textContent = lang === "ja" ? "EN" : "JA";
+  const gpsActive = document.getElementById("gps-status").classList.contains("gps-active");
   document.getElementById("gps-status-text").textContent =
-    gpsAcquired ? t("gpsAcquired") : t("gpsSearching");
+    gpsAcquired ? t("gpsAcquired") : gpsActive ? t("gpsSearching") : t("gpsTapToStart");
   // update denied banner text if visible
   const banner = document.getElementById("gps-denied-banner");
   if (banner && banner.classList.contains("visible")) {
@@ -851,7 +859,7 @@ function startGPSWatch() {
     document.getElementById("gps-accuracy").textContent = "";
     if (err.code === 1) {
       document.getElementById("gps-status-text").textContent = t("gpsDenied");
-      showDeniedBanner();
+      showDeniedBanner(err);
     } else {
       // TIMEOUT or POSITION_UNAVAILABLE — retry after short delay
       document.getElementById("gps-status-text").textContent = t("gpsSearching");
@@ -907,7 +915,7 @@ function detectOS() {
   return "other";
 }
 
-function showDeniedBanner() {
+function showDeniedBanner(err) {
   const banner = document.getElementById("gps-denied-banner");
   const msg = document.getElementById("gps-denied-msg");
   const steps = document.getElementById("gps-denied-steps");
@@ -977,7 +985,13 @@ function showDeniedBanner() {
 
   const c = content[os][lang];
   msg.textContent = c.msg;
-  steps.innerHTML = "<ol>" + c.steps.map(s => `<li>${s}</li>`).join("") + "</ol>";
+
+  // Debug info — helps diagnose Safari/iOS permission issues
+  const debugInfo = err
+    ? `[debug] code=${err.code} msg="${err.message}" ua=${navigator.userAgent.slice(0,80)}`
+    : "";
+  steps.innerHTML = "<ol>" + c.steps.map(s => `<li>${s}</li>`).join("") + "</ol>"
+    + (debugInfo ? `<p style="font-size:0.75em;opacity:0.6;margin-top:4px;word-break:break-all">${debugInfo}</p>` : "");
   btn.textContent = lang === "en" ? "Retry" : "再試行";
   banner.classList.add("visible");
   btn.onclick = () => {
@@ -1543,7 +1557,15 @@ window.addEventListener("load", () => {
   // checkCopyright();
   updateWeightDisplay();
   applyLang();
-  startGPSWatch();
+
+  // GPS starts on user tap — required for Safari (iOS disallows auto-start without gesture)
+  const gpsStatus = document.getElementById("gps-status");
+  gpsStatus.addEventListener("click", () => {
+    if (gpsStatus.classList.contains("gps-active")) return;
+    gpsStatus.classList.add("gps-active");
+    document.getElementById("gps-status-text").textContent = t("gpsSearching");
+    startGPSWatch();
+  });
 
   if (bodymass <= 0) {
     showWeightModal(() => {});
