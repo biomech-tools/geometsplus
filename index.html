@@ -118,6 +118,29 @@
   #gps-dot.searching { background: #e67e22; animation: glow 0.7s infinite; }
   @keyframes glow { 0%,100%{opacity:1}50%{opacity:0.35} }
   #gps-accuracy { font-size: 0.65em; color: var(--text-sub); text-align: right; }
+  #gps-denied-banner {
+    display: none;
+    background: #fff3cd;
+    border-left: 4px solid #e67e22;
+    color: #7a4d00;
+    font-size: 0.82em;
+    padding: 8px 12px;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  #gps-denied-banner.visible { display: flex; }
+  #gps-retry-btn {
+    background: #e67e22;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 4px 10px;
+    font-size: 0.9em;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #gps-retry-btn:active { background: #c96a10; }
 
   /* ---- Info bar ---- */
   #info-bar {
@@ -437,6 +460,12 @@
     </div>
   </div>
 
+  <!-- GPS permission denied banner -->
+  <div id="gps-denied-banner">
+    <span id="gps-denied-msg">位置情報の使用が許可されていません。ブラウザ／OS の設定で許可してから再試行してください。</span>
+    <button id="gps-retry-btn">再試行</button>
+  </div>
+
   <!-- Info bar -->
   <div id="info-bar">
     <div id="weight-display">
@@ -704,6 +733,14 @@ function applyLang() {
   document.getElementById("lang-btn").textContent = lang === "ja" ? "EN" : "JA";
   document.getElementById("gps-status-text").textContent =
     gpsAcquired ? t("gpsAcquired") : t("gpsSearching");
+  // update denied banner text if visible
+  const banner = document.getElementById("gps-denied-banner");
+  if (banner && banner.classList.contains("visible")) {
+    document.getElementById("gps-denied-msg").textContent = lang === "en"
+      ? "Location access is denied. Allow it in your browser/OS settings, then tap Retry."
+      : "位置情報の使用が許可されていません。ブラウザ／OS の設定で許可してから再試行してください。";
+    document.getElementById("gps-retry-btn").textContent = lang === "en" ? "Retry" : "再試行";
+  }
 }
 
 document.getElementById("lang-btn").addEventListener("click", () => {
@@ -780,24 +817,52 @@ function startGPSWatch() {
     document.getElementById("gps-status-text").textContent = t("gpsNA");
     return;
   }
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      gpsAcquired = true;
-      lastPos = pos;
-      document.getElementById("gps-dot").className = "acquired";
-      document.getElementById("gps-status-text").textContent = t("gpsAcquired");
-      document.getElementById("gps-accuracy").textContent =
-        `±${Math.round(pos.coords.accuracy)} m`;
-    },
-    (err) => {
-      gpsAcquired = false;
-      document.getElementById("gps-dot").className = "searching";
-      document.getElementById("gps-status-text").textContent =
-        err.code === 1 ? t("gpsDenied") : t("gpsSearching");
-      document.getElementById("gps-accuracy").textContent = "";
-    },
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-  );
+  function doWatch() {
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        gpsAcquired = true;
+        lastPos = pos;
+        document.getElementById("gps-dot").className = "acquired";
+        document.getElementById("gps-status-text").textContent = t("gpsAcquired");
+        document.getElementById("gps-accuracy").textContent =
+          `±${Math.round(pos.coords.accuracy)} m`;
+      },
+      (err) => {
+        gpsAcquired = false;
+        document.getElementById("gps-dot").className = "searching";
+        document.getElementById("gps-accuracy").textContent = "";
+        if (err.code === 1) {
+          // permission denied — show banner prompting user to fix settings
+          document.getElementById("gps-status-text").textContent = t("gpsDenied");
+          showDeniedBanner();
+        } else {
+          // TIMEOUT or POSITION_UNAVAILABLE: clear and retry
+          document.getElementById("gps-status-text").textContent = t("gpsSearching");
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+          setTimeout(doWatch, 3000);
+        }
+      },
+      // timeout omitted → browser waits as long as needed for a real GPS fix
+      { enableHighAccuracy: true, maximumAge: 0 }
+    );
+  }
+  doWatch();
+}
+
+function showDeniedBanner() {
+  const banner = document.getElementById("gps-denied-banner");
+  const msg = document.getElementById("gps-denied-msg");
+  const btn = document.getElementById("gps-retry-btn");
+  msg.textContent = lang === "en"
+    ? "Location access is denied. Allow it in your browser/OS settings, then tap Retry."
+    : "位置情報の使用が許可されていません。ブラウザ／OS の設定で許可してから再試行してください。";
+  btn.textContent = lang === "en" ? "Retry" : "再試行";
+  banner.classList.add("visible");
+  btn.onclick = () => {
+    banner.classList.remove("visible");
+    startGPSWatch();
+  };
 }
 
 function stopGPSWatch() {
