@@ -876,33 +876,25 @@ function startGPSWatch() {
   if (isSafari && navigator.permissions && navigator.permissions.query) {
     // Query permission state first; Safari may return "prompt" even after granting,
     // so we always attempt getCurrentPosition to trigger the native dialog.
-    navigator.permissions.query({ name: "geolocation" }).then((result) => {
-      if (result.state === "denied") {
-        // Already hard-denied in OS settings — show instructions immediately
-        onGPSError({ code: 1 });
-        return;
-      }
-      // "granted" or "prompt": use getCurrentPosition to warm up Safari's
-      // internal permission check, then switch to watchPosition.
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          onGPSSuccess(pos);
+    // Always attempt getCurrentPosition regardless of permissions.query result.
+    // Safari on iOS sometimes returns "denied" from the Permissions API even
+    // when the OS setting is "While Using" — the only reliable way to surface
+    // the native dialog is to call getCurrentPosition directly after a user gesture.
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        onGPSSuccess(pos);
+        doWatch();
+      },
+      (err) => {
+        if (err.code === 1) {
+          onGPSError(err);
+        } else {
+          // Unavailable/timeout on first try — still start watching
           doWatch();
-        },
-        (err) => {
-          if (err.code === 1) {
-            onGPSError(err);
-          } else {
-            // Unavailable/timeout on first try — still start watching
-            doWatch();
-          }
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-      );
-    }).catch(() => {
-      // permissions API not available in this Safari version — fall straight through
-      doWatch();
-    });
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
   } else {
     doWatch();
   }
@@ -927,18 +919,18 @@ function showDeniedBanner(err) {
       ja: {
         msg: "位置情報の使用が許可されていません。",
         steps: [
-          "iPhone の「設定」アプリを開く",
-          "「プライバシーとセキュリティ」→「位置情報サービス」",
-          "「Safari」→「このAppの使用中」または「常に」を選択",
+          "Safari のアドレスバー左の「ぁあ」または「AA」をタップ",
+          "「Webサイトの設定」→「位置情報」→「許可」を選択",
+          "それでも解決しない場合：iPhone「設定」→「プライバシーとセキュリティ」→「位置情報サービス」→「Safari」→「このAppの使用中」を選択",
           "このページに戻り「再試行」をタップ"
         ]
       },
       en: {
         msg: "Location access is denied.",
         steps: [
-          "Open the iPhone Settings app",
-          "Go to Privacy & Security → Location Services",
-          "Tap Safari → select While Using the App or Always",
+          "Tap 'aA' or 'AA' in the Safari address bar",
+          "Tap Website Settings → Location → Allow",
+          "If still denied: iPhone Settings → Privacy & Security → Location Services → Safari → While Using the App",
           "Return here and tap Retry"
         ]
       }
