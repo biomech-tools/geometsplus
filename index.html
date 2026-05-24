@@ -823,36 +823,81 @@ function startGPSWatch() {
     document.getElementById("gps-status-text").textContent = t("gpsNA");
     return;
   }
+
+  // Safari on HTTPS sometimes refuses watchPosition immediately with code=1
+  // even when the user has granted permission. Using getCurrentPosition first
+  // forces the permission dialog to appear synchronously (required by Safari),
+  // then we fall back to watchPosition once we know permission is granted.
   function doWatch() {
     watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        gpsAcquired = true;
-        lastPos = pos;
-        document.getElementById("gps-dot").className = "acquired";
-        document.getElementById("gps-status-text").textContent = t("gpsAcquired");
-        document.getElementById("gps-accuracy").textContent =
-          `±${Math.round(pos.coords.accuracy)} m`;
-      },
-      (err) => {
-        gpsAcquired = false;
-        document.getElementById("gps-dot").className = "searching";
-        document.getElementById("gps-accuracy").textContent = "";
-        if (err.code === 1) {
-          // permission denied — show banner prompting user to fix settings
-          document.getElementById("gps-status-text").textContent = t("gpsDenied");
-          showDeniedBanner();
-        } else {
-          // TIMEOUT or POSITION_UNAVAILABLE: clear and retry
-          document.getElementById("gps-status-text").textContent = t("gpsSearching");
-          navigator.geolocation.clearWatch(watchId);
-          watchId = null;
-          setTimeout(doWatch, 3000);
-        }
-      },
+      onGPSSuccess,
+      onGPSError,
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
   }
-  doWatch();
+
+  function onGPSSuccess(pos) {
+    gpsAcquired = true;
+    lastPos = pos;
+    document.getElementById("gps-dot").className = "acquired";
+    document.getElementById("gps-status-text").textContent = t("gpsAcquired");
+    document.getElementById("gps-accuracy").textContent =
+      `±${Math.round(pos.coords.accuracy)} m`;
+  }
+
+  function onGPSError(err) {
+    gpsAcquired = false;
+    document.getElementById("gps-dot").className = "searching";
+    document.getElementById("gps-accuracy").textContent = "";
+    if (err.code === 1) {
+      document.getElementById("gps-status-text").textContent = t("gpsDenied");
+      showDeniedBanner();
+    } else {
+      // TIMEOUT or POSITION_UNAVAILABLE — retry after short delay
+      document.getElementById("gps-status-text").textContent = t("gpsSearching");
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      setTimeout(doWatch, 3000);
+    }
+  }
+
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  if (isSafari && navigator.permissions && navigator.permissions.query) {
+    // Query permission state first; Safari may return "prompt" even after granting,
+    // so we always attempt getCurrentPosition to trigger the native dialog.
+    navigator.permissions.query({ name: "geolocation" }).then((result) => {
+      if (result.state === "denied") {
+        // Already hard-denied in OS settings — show instructions immediately
+        onGPSError({ code: 1 });
+        return;
+      }
+      // "granted" or "prompt": use getCurrentPosition to warm up Safari's
+      // internal permission check, then switch to watchPosition.
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          onGPSSuccess(pos);
+          doWatch();
+        },
+        (err) => {
+          if (err.code === 1) {
+            onGPSError(err);
+          } else {
+            // Unavailable/timeout on first try — still start watching
+            doWatch();
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      );
+    }).catch(() => {
+      // permissions API not available in this Safari version — fall straight through
+      doWatch();
+    });
+  } else {
+    doWatch();
+  }
 }
 
 function detectOS() {
